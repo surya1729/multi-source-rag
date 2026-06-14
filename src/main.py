@@ -41,13 +41,23 @@ def process_text_file(file_path, chunk_size, overlap):
     documents = create_documents(chunks, file_path, 'text')
     return documents
 
+def create_fake_embeddings(text):
+    return [
+        len(text),
+        text.count("Python"),
+        text.count("programming")
+    ]
+
 def main():
     documents = process_text_file("data/sample.txt", 200, 50)
-    print("documents length: ", len(documents))
+    for document in documents:
+        document["embedding"] = create_fake_embeddings(document["text"])
+
+    print("documents length:", len(documents))
+
     for index, document in enumerate(documents):
         print("\n--- document", index + 1, "---")
         print(document)
-
 
 if __name__ == "__main__":
     main()
