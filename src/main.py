@@ -1,3 +1,7 @@
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
 def create_documents(chunks, source, source_type):
     documents = []
     for index, chunk in enumerate(chunks):
@@ -27,29 +31,26 @@ def load_text_file(file_path):
         content = file.read()
     return content
 
+# Runs the text ingestion pipeline: load, chunk, and attach metadata.
 def process_text_file(file_path, chunk_size, overlap):
     content = load_text_file(file_path)
-    # print("no of characters: ", len(content))
-    # print("first 300 characters: ", content[:300])
-    # print("--------------- chunks ---------------")
     chunks = chunk_text(content, chunk_size, overlap)
-    # print("chunk length: ", len(chunks))
-    # for index, chunk in enumerate(chunks):
-    #     print("\n--- chunk", index + 1, "---")
-    #     print(chunk)
-    # print("--------------- structured documents with metadata ---------------")
     documents = create_documents(chunks, file_path, 'text')
     return documents
 
-def create_fake_embeddings(text):
-    lower_text = text.lower()
+# Creates a semantic embedding vector for the input text.
+def create_embeddings(text):
+    embedding = model.encode(text)
+    return embedding.tolist()
 
-    return [
-        lower_text.count("python"),
-        lower_text.count("programming")
-    ]
+# Adds an embedding vector to each document.
+def add_embeddings(documents):
+    for document in documents:
+        document["embedding"] = create_embeddings(document["text"])
+    return documents
 
-def calculate_distance(embedding1, embedding2):
+# Calculates squared Euclidean distance between two embeddings.
+def squared_euclidean_distance(embedding1, embedding2):
     distance = 0 
     for index in range(len(embedding1)):
         difference = embedding1[index] - embedding2[index]
@@ -59,34 +60,109 @@ def calculate_distance(embedding1, embedding2):
 def get_distance(document):
     return document['distance']
 
+# Searches documents using squared Euclidean distance.
+# Lower distance means higher similarity.
 def search_documents(query, documents, top_k):
-    query_embeddings = create_fake_embeddings(query)
+    query_embeddings = create_embeddings(query)
     for document in documents:
-        document["distance"] = calculate_distance(query_embeddings, document['embedding'])
+        document["distance"] = squared_euclidean_distance(query_embeddings, document['embedding'])
     sorted_documents = sorted(documents, key=get_distance)
     return sorted_documents[:top_k]
 
+# Calculates cosine similarity using dot product and vector lengths.
+# cosine_similarity = dot_product / (embedding1_length * embedding2_length)
+def cosine_similarity(embedding1, embedding2):
+    dot_product = 0
+    embedding1_length = 0
+    embedding2_length = 0
+    for index in range(len(embedding1)):
+        dot_product = dot_product + embedding1[index] * embedding2[index]
+        embedding1_length = embedding1_length + embedding1[index] * embedding1[index]
+        embedding2_length = embedding2_length + embedding2[index] * embedding2[index]
+    
+    embedding1_length = embedding1_length ** 0.5
+    embedding2_length = embedding2_length ** 0.5
+
+    return dot_product/(embedding1_length * embedding2_length)
+
+def get_score(document):
+    return document['score']
+
+def get_manhattan_distance(document):
+    return document['manhattan_distance']
+
+# Searches documents using cosine similarity.
+# Higher cosine similarity means higher similarity.
+def search_documents_by_cosine(query, documents, top_k):
+    query_embeddings = create_embeddings(query)
+    for document in documents:
+        document['score'] = cosine_similarity(query_embeddings, document['embedding'])
+    sorted_documents = sorted(documents, key=get_score, reverse=True)
+    return sorted_documents[:top_k]
+
+# Calculates dot product between two embeddings.
+def dot_product(embedding1, embedding2):
+    score = 0
+    for index in range (len(embedding1)):
+        score = score + embedding1[index] * embedding2[index]
+    return score
+
+# Searches documents using dot product.
+# Higher dot product means higher similarity.
+def search_documents_by_dot_product(query, documents, top_k):
+    query_embeddings = create_embeddings(query)
+    for document in documents:
+        document['score'] = dot_product(query_embeddings, document['embedding'])
+    sorted_document = sorted(documents, key=get_score, reverse=True)
+    return sorted_document[:top_k]
+
+# Calculates Manhattan distance by summing absolute differences.
+def manhattan_distance(embedding1, embedding2):
+    score = 0
+    for index in range (len(embedding1)):
+        score = score + abs(embedding1[index]-embedding2[index])
+    return score
+
+# Searches documents using Manhattan distance.
+# Lower Manhattan distance means higher similarity.
+def search_documents_by_manhattan_distance(query, documents, top_k):
+    query_embeddings = create_embeddings(query)
+    for document in documents:
+        document['manhattan_distance'] = manhattan_distance(query_embeddings, document['embedding'])
+    sorted_distance = sorted(documents, key=get_manhattan_distance)
+    return sorted_distance[:top_k]
 
 
 def main():
     documents = process_text_file("data/sample.txt", 200, 50)
-    for document in documents:
-        document["embedding"] = create_fake_embeddings(document["text"])
-
-    # create a query embeddings based on query input
-    # compare the distances between query embeddings and document embeddings
-    query = "what is Python Programming"
-
+    documents = add_embeddings(documents)
+    query = "Who created Python?"
     results = search_documents(query, documents, 3)
-    
     print("\n--- search results ---")
     for index, document in enumerate(results):
-        print("\n--- result", index + 1, "---")
+        print("\n--- result based on euclidean distance", index + 1, "---")
         print("distance:", document["distance"])
+        print("metadata:", document["metadata"])
+        print("text:", document["text"])
+    results = search_documents_by_cosine(query, documents, 3)
+    for index, document in enumerate(results):
+        print("\n--- result based on cosine similarity", index + 1, "---")
+        print("score:", document["score"])
+        print("metadata:", document["metadata"])
+        print("text:", document["text"])
+    results = search_documents_by_dot_product(query, documents, 3)
+    for index, document in enumerate(results):
+        print("\n--- result based on dot product", index + 1, "---")
+        print("score:", document["score"])
+        print("metadata:", document["metadata"])
+        print("text:", document["text"])
+    results = search_documents_by_manhattan_distance(query, documents, 3)
+    for index, document in enumerate(results):
+        print("\n--- result based on manhattan", index + 1, "---")
+        print("manhattan_distance:", document["manhattan_distance"])
         print("metadata:", document["metadata"])
         print("text:", document["text"])
     
 
 if __name__ == "__main__":
     main()
-
