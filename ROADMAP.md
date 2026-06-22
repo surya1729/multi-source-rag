@@ -121,15 +121,12 @@ Similarity and distance methods to learn:
 - Cosine similarity
 - Dot product
 - Manhattan distance
-- Keyword search / BM25
-- Hybrid search
 
 Key ideas:
 
 - Lower distance usually means more similar.
 - Higher similarity usually means more similar.
 - Cosine similarity is very common for text embeddings.
-- Hybrid search combines semantic search and keyword search.
 
 Expected pipeline:
 
@@ -142,10 +139,6 @@ Completed notes:
 - Implemented squared Euclidean distance, cosine similarity, dot product, and Manhattan distance.
 - Compared lower-is-better distance methods with higher-is-better similarity methods.
 - Refactored retrieval into a generic `search_documents` function that accepts a scoring function and sort direction.
-
-Deferred notes:
-
-- BM25 and hybrid search will be revisited after vector database basics.
 
 ### Milestone 4: In-Memory Retriever
 
@@ -270,8 +263,15 @@ Concepts:
 - Chunk size tuning
 - Chunk overlap tuning
 - Similarity method choice
+- Keyword search / BM25
 - Hybrid search
 - Reranking
+
+Key ideas:
+
+- BM25 is lexical search, not vector similarity.
+- Hybrid search combines semantic vector search with keyword search.
+- These methods are usually used to improve retrieval quality after the basic vector pipeline works.
 
 Expected result:
 

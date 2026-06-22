@@ -87,28 +87,38 @@ def manhattan_distance(embedding1, embedding2):
         score = score + abs(embedding1[index]-embedding2[index])
     return score
 
-def search_documents(query, documents, top_k, score_function, score_name, higher_is_better):
-    query_embedding = create_embeddings(query)
+class InMemoryVectorStore:
+    # __init__ runs automatically when an object is created.
+    def __init__(self):
+        self.documents = []
+    # Adds an embedding vector to each document.
+    def add_documents(self, documents):
+        documents = add_embeddings(documents)
+        self.documents.extend(documents)
+    # Searches stored documents using the provided scoring function.
+    def search(self, query, top_k, score_function, score_name, higher_is_better):
+        query_embedding = create_embeddings(query)
 
-    for document in documents:
-        document[score_name] = score_function(query_embedding, document["embedding"])
+        for document in self.documents:
+            document[score_name] = score_function(query_embedding, document["embedding"])
 
-    sorted_documents = sorted(
-        documents,
-        key=lambda document: document[score_name],
-        reverse=higher_is_better
-    )
+        sorted_documents = sorted(
+            self.documents,
+            key=lambda document: document[score_name],
+            reverse=higher_is_better
+        )
 
-    return sorted_documents[:top_k]
+        return sorted_documents[:top_k]
+    
 
 
 def main():
     documents = process_text_file("data/sample.txt", 200, 50)
-    documents = add_embeddings(documents)
+    vector_store = InMemoryVectorStore()
+    vector_store.add_documents(documents)
     query = "Who created Python?"
-    euclidean_results = search_documents(
+    euclidean_results = vector_store.search(
         query,
-        documents,
         3,
         squared_euclidean_distance,
         "squared_euclidean_distance",
@@ -121,9 +131,8 @@ def main():
         print("metadata:", document["metadata"])
         print("text:", document["text"])
 
-    cosine_similarity_results = search_documents(
+    cosine_similarity_results = vector_store.search(
         query,
-        documents,
         3,
         cosine_similarity,
         "cosine_similarity",
@@ -135,9 +144,8 @@ def main():
         print("metadata:", document["metadata"])
         print("text:", document["text"])
     
-    dot_product_results = search_documents(
+    dot_product_results = vector_store.search(
         query,
-        documents,
         3,
         dot_product,
         "dot_product",
@@ -149,9 +157,8 @@ def main():
         print("metadata:", document["metadata"])
         print("text:", document["text"])
 
-    manhattan_distance_results = search_documents(
+    manhattan_distance_results = vector_store.search(
         query,
-        documents,
         3,
         manhattan_distance,
         "manhattan_distance",
