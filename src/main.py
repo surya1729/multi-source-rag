@@ -119,15 +119,55 @@ def ingest_documents(vector_store):
     documents.extend(process_text_file("data/python_history.txt", 200, 50))
     vector_store.add_documents(documents)
 
+def build_context(results):
+    context = []
+    for result in results:
+        metadata = result['metadata']
+        source = metadata['source']
+        chunk_index = metadata['chunk_index']
+        text = result['text']
+
+        context_part = (
+            f"[Source: {source}, Chunk: {chunk_index}]\n"
+            f"{text}"
+        )
+        context.append(context_part)
+    
+    return "\n\n".join(context)
+
+def filter_results_by_distance(results, max_distance):
+    filtered_results = []
+    for result in results:
+        if result['distance'] <= max_distance:
+            filtered_results.append(result)
+    return filtered_results
+
+def build_prompt(question, context):
+    if not context:
+        context = "No relevant information in context"
+    prompt = f"""
+Use the context below to answer the question.
+If the answer is not in the context, say "I don't know based on the provided context."
+
+When you answer, cite the source and chunk you used in this format:
+(Source: source_path, Chunk: chunk_number)
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+    return prompt
+
 def query_documents(vector_store, query, where=None):
     results = vector_store.search(query, 3, where=where)
-
-    for index, result in enumerate(results):
-        print("\n--- result", index + 1, "---")
-        print("id:", result["id"])
-        print("distance:", result["distance"])
-        print("metadata:", result["metadata"])
-        print("text:", result["text"])
+    filtered_results = filter_results_by_distance(results, 1.0)
+    context = build_context(filtered_results)
+    prompt = build_prompt(query, context)
+    print(prompt)
 
 
 def main():
@@ -142,6 +182,12 @@ def main():
     query_documents(
         chromedb_store,
         "What programming styles does Python support?",
+        where={"source": "data/python_features.txt"}
+    )
+
+    query_documents(
+        chromedb_store,
+        "what is your name?",
         where={"source": "data/python_features.txt"}
     )
     
