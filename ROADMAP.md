@@ -142,7 +142,7 @@ Completed notes:
 
 ### Milestone 4: In-Memory Retriever
 
-Status: Current
+Status: Complete
 
 Build a small retriever using Python lists before adding a vector database.
 
@@ -153,6 +153,13 @@ Concepts:
 - Return top K chunks.
 - Keep metadata attached to results.
 
+Completed notes:
+
+- Built an `InMemoryVectorStore` class.
+- Added documents into the store with embeddings.
+- Queried the store using configurable scoring functions.
+- Preserved metadata in retrieved results.
+
 Expected pipeline:
 
 ```text
@@ -161,7 +168,7 @@ embedded documents + query -> ranked search results
 
 ### Milestone 5: Vector Database
 
-Status: Not started
+Status: Complete
 
 Move from in-memory search to a real vector database.
 
@@ -178,6 +185,16 @@ Concepts:
 - Similarity search
 - Persisting data locally
 
+Completed notes:
+
+- Installed and used ChromaDB.
+- Created a persistent local Chroma database in `chroma_db/`.
+- Built a `ChromaDBStore` wrapper.
+- Used `upsert` for repeatable ingestion.
+- Formatted raw Chroma query output into clean result dictionaries.
+- Added metadata filtering with `where`.
+- Separated ingestion and querying into separate functions.
+
 Expected pipeline:
 
 ```text
@@ -186,7 +203,7 @@ documents -> embeddings -> vector DB -> query -> top K chunks
 
 ### Milestone 6: Prompt Construction
 
-Status: Not started
+Status: Current
 
 Turn retrieved chunks into useful context for an LLM.
 
@@ -322,11 +339,11 @@ Add answer generation with citations
 We are currently learning:
 
 ```text
-in-memory retrieval abstraction
+prompt construction
 ```
 
 Next implementation step:
 
 ```text
-Wrap embedded documents and search behavior into a small in-memory vector store.
+Convert retrieved chunks into a context block for an LLM prompt.
 ```

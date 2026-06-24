@@ -1,4 +1,5 @@
 from sentence_transformers import SentenceTransformer
+import chromadb
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -48,127 +49,101 @@ def add_embeddings(documents):
     for document in documents:
         document["embedding"] = create_embeddings(document["text"])
     return documents
-
-# Calculates squared Euclidean distance between two embeddings.
-def squared_euclidean_distance(embedding1, embedding2):
-    distance = 0 
-    for index in range(len(embedding1)):
-        difference = embedding1[index] - embedding2[index]
-        distance = distance + difference * difference
-    return distance
-
-# Calculates cosine similarity using dot product and vector lengths.
-# cosine_similarity = dot_product / (embedding1_length * embedding2_length)
-def cosine_similarity(embedding1, embedding2):
-    dot_product = 0
-    embedding1_length = 0
-    embedding2_length = 0
-    for index in range(len(embedding1)):
-        dot_product = dot_product + embedding1[index] * embedding2[index]
-        embedding1_length = embedding1_length + embedding1[index] * embedding1[index]
-        embedding2_length = embedding2_length + embedding2[index] * embedding2[index]
     
-    embedding1_length = embedding1_length ** 0.5
-    embedding2_length = embedding2_length ** 0.5
-
-    return dot_product/(embedding1_length * embedding2_length)
-
-# Calculates dot product between two embeddings.
-def dot_product(embedding1, embedding2):
-    score = 0
-    for index in range (len(embedding1)):
-        score = score + embedding1[index] * embedding2[index]
-    return score
-
-# Calculates Manhattan distance by summing absolute differences.
-def manhattan_distance(embedding1, embedding2):
-    score = 0
-    for index in range (len(embedding1)):
-        score = score + abs(embedding1[index]-embedding2[index])
-    return score
-
-class InMemoryVectorStore:
-    # __init__ runs automatically when an object is created.
-    def __init__(self):
-        self.documents = []
-    # Adds an embedding vector to each document.
+class ChromaDBStore:
+    def __init__(self, path, collection_name):
+        self.client = chromadb.PersistentClient(path=path)
+        self.collection = self.client.get_or_create_collection(name=collection_name)
+# {
+#     "id": "sample.txt-0",
+#     "document": "Python is a high-level programming language...",
+#     "embedding": [0.02, -0.14, 0.77, ...],
+#     "metadata": {
+#         "source": "data/sample.txt",
+#         "source_type": "text",
+#         "chunk_index": 0
+#     }
+# }
     def add_documents(self, documents):
         documents = add_embeddings(documents)
-        self.documents.extend(documents)
-    # Searches stored documents using the provided scoring function.
-    def search(self, query, top_k, score_function, score_name, higher_is_better):
-        query_embedding = create_embeddings(query)
+        ids = []
+        texts = []
+        metadatas = []
+        embeddings = []
 
-        for document in self.documents:
-            document[score_name] = score_function(query_embedding, document["embedding"])
+        for document in documents:
+            metadata = document['metadata']
+            document_id = metadata["source"] + "-" + str(metadata["chunk_index"])
 
-        sorted_documents = sorted(
-            self.documents,
-            key=lambda document: document[score_name],
-            reverse=higher_is_better
+            ids.append(document_id)
+            texts.append(document['text'])
+            metadatas.append(metadata)
+            embeddings.append(document['embedding'])
+
+        self.collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            documents=texts,
+            metadatas=metadatas
         )
 
-        return sorted_documents[:top_k]
+    def search(self, query, top_k, where=None):
+        query_embeddings = create_embeddings(query)
+        return self.format_results(self.collection.query(
+            query_embeddings=[query_embeddings],
+            n_results=top_k,
+            where=where
+        ))
     
+    def format_results(self, results):
+        formatted_results = []
+        ids = results["ids"][0]
+        texts = results["documents"][0]
+        metadatas = results["metadatas"][0]
+        distances = results["distances"][0]
+        for index in range(len(ids)):
+            formatted_result = {
+                "id": ids[index],
+                "text": texts[index],
+                "metadata": metadatas[index],
+                "distance": distances[index]
+            }
+
+            formatted_results.append(formatted_result)
+        return formatted_results
+    
+
+def ingest_documents(vector_store):
+    documents = []
+    documents.extend(process_text_file("data/python_features.txt", 200, 50))
+    documents.extend(process_text_file("data/python_history.txt", 200, 50))
+    vector_store.add_documents(documents)
+
+def query_documents(vector_store, query, where=None):
+    results = vector_store.search(query, 3, where=where)
+
+    for index, result in enumerate(results):
+        print("\n--- result", index + 1, "---")
+        print("id:", result["id"])
+        print("distance:", result["distance"])
+        print("metadata:", result["metadata"])
+        print("text:", result["text"])
 
 
 def main():
-    documents = process_text_file("data/sample.txt", 200, 50)
-    vector_store = InMemoryVectorStore()
-    vector_store.add_documents(documents)
-    query = "Who created Python?"
-    euclidean_results = vector_store.search(
-        query,
-        3,
-        squared_euclidean_distance,
-        "squared_euclidean_distance",
-        False
+    chromedb_store = ChromaDBStore('chroma_db', 'rag_documents')
+    ingest_documents(chromedb_store)
+    query_documents(
+        chromedb_store,
+        "Who created Python?",
+        where={"source": "data/python_history.txt"}
     )
-    print("\n--- search euclidean_results ---")
-    for index, document in enumerate(euclidean_results):
-        print("\n--- result based on euclidean distance", index + 1, "---")
-        print("squared_euclidean_distance:", document["squared_euclidean_distance"])
-        print("metadata:", document["metadata"])
-        print("text:", document["text"])
 
-    cosine_similarity_results = vector_store.search(
-        query,
-        3,
-        cosine_similarity,
-        "cosine_similarity",
-        True,
+    query_documents(
+        chromedb_store,
+        "What programming styles does Python support?",
+        where={"source": "data/python_features.txt"}
     )
-    for index, document in enumerate(cosine_similarity_results):
-        print("\n--- result based on cosine similarity", index + 1, "---")
-        print("cosine_similarity:", document["cosine_similarity"])
-        print("metadata:", document["metadata"])
-        print("text:", document["text"])
-    
-    dot_product_results = vector_store.search(
-        query,
-        3,
-        dot_product,
-        "dot_product",
-        True
-    )
-    for index, document in enumerate(dot_product_results):
-        print("\n--- result based on dot product", index + 1, "---")
-        print("dot_product:", document["dot_product"])
-        print("metadata:", document["metadata"])
-        print("text:", document["text"])
-
-    manhattan_distance_results = vector_store.search(
-        query,
-        3,
-        manhattan_distance,
-        "manhattan_distance",
-        False
-    )
-    for index, document in enumerate(manhattan_distance_results):
-        print("\n--- result based on manhattan", index + 1, "---")
-        print("manhattan_distance:", document["manhattan_distance"])
-        print("metadata:", document["metadata"])
-        print("text:", document["text"])
     
 
 if __name__ == "__main__":
